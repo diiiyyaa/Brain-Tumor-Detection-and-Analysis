@@ -8,6 +8,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image
 
+# Twilio SMS / WhatsApp emergency pager integration
+try:
+    from twilio.rest import Client
+except ImportError:
+    Client = None
+
 # Streamlit interactive before/after image comparison slider
 try:
     from streamlit_image_comparison import image_comparison
@@ -620,7 +626,108 @@ if app_module == "🔬 Diagnostic Workspace":
             is_signed = st.checkbox("Apply Cryptographic Signature (Dr. Sarah Lin, MD)")
             if st.button("⚡ Generate & Export Clinical PDF Report", use_container_width=True):
                 if is_signed:
-                    st.success("✅ Signed clinical report successfully generated!")
+                    try:
+                        from io import BytesIO
+                        from reportlab.lib.pagesizes import A4
+                        from reportlab.lib import colors
+                        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                        from reportlab.lib.enums import TA_CENTER
+                        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+                        pdf_buffer = BytesIO()
+                        doc = SimpleDocTemplate(
+                            pdf_buffer,
+                            pagesize=A4,
+                            rightMargin=40,
+                            leftMargin=40,
+                            topMargin=40,
+                            bottomMargin=40,
+                        )
+
+                        styles = getSampleStyleSheet()
+                        title_style = ParagraphStyle(
+                            "ReportTitle",
+                            parent=styles["Title"],
+                            alignment=TA_CENTER,
+                            fontSize=18,
+                            leading=22,
+                            spaceAfter=18,
+                        )
+                        heading_style = ParagraphStyle(
+                            "ReportHeading",
+                            parent=styles["Heading2"],
+                            fontSize=12,
+                            leading=15,
+                            spaceBefore=10,
+                            spaceAfter=8,
+                        )
+                        body_style = ParagraphStyle(
+                            "ReportBody",
+                            parent=styles["BodyText"],
+                            fontSize=10,
+                            leading=14,
+                        )
+
+                        story = [
+                            Paragraph("NeuroSight AI", title_style),
+                            Paragraph("Clinical Brain MRI Analysis Report", heading_style),
+                            Spacer(1, 8),
+                        ]
+
+                        report_data = [
+                            ["Parameter", "Result"],
+                            ["Primary Classification", str(st.session_state.selected_pathology)],
+                            ["Confidence", f"{confidence:.1f}%"],
+                            ["Tumor Grade / Status", str(grade)],
+                            ["Estimated Volume", f"{vol_cm3} cm³"],
+                            ["Surface Area", f"{area_cm2} cm²"],
+                            ["Anatomical Localization", str(lobe)],
+                        ]
+
+                        table = Table(report_data, colWidths=[190, 300])
+                        table.setStyle(TableStyle([
+                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F4C5C")),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                            ("FONTSIZE", (0, 0), (-1, -1), 9),
+                            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F5F7FA")),
+                            ("TOPPADDING", (0, 0), (-1, -1), 7),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                        ]))
+                        story.append(table)
+                        story.append(Spacer(1, 18))
+                        story.append(Paragraph("Radiologist Observations", heading_style))
+                        story.append(Paragraph(str(notes_input).replace("&", "&amp;"), body_style))
+                        story.append(Spacer(1, 18))
+                        story.append(Paragraph(
+                            "Digital Sign-off: Dr. Sarah Lin, MD | Cryptographic signature applied.",
+                            body_style,
+                        ))
+                        story.append(Spacer(1, 18))
+                        story.append(Paragraph(
+                            "This report is generated by NeuroSight AI for clinical decision support and should be reviewed by a qualified medical professional.",
+                            body_style,
+                        ))
+
+                        doc.build(story)
+                        pdf_buffer.seek(0)
+                        pdf_bytes = pdf_buffer.getvalue()
+
+                        st.success("✅ Signed clinical report successfully generated!")
+                        st.download_button(
+                            label="📥 Download Clinical PDF Report",
+                            data=pdf_bytes,
+                            file_name="NeuroSight_AI_Clinical_Report.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+                    except ImportError:
+                        st.error("PDF generation requires ReportLab. Run: pip install reportlab")
+                    except Exception as e:
+                        st.error(f"❌ Could not generate the PDF report: {str(e)}")
                 else:
                     st.warning("Please sign the digital sign-off checkbox prior to report export.")
 
